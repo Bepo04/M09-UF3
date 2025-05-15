@@ -1,20 +1,18 @@
-import java.io.File;
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 public class Servidor {
 
     public static final int PORT = 8080;
     public static final String HOST = "localhost";
-    private static final String LOCAL_STORAGE = "C:/Users/paulo/Documents/ITIC/M09/M09-UF3";
 
     private ServerSocket serverSocket;
+    private Socket clientSocket;
 
     public Socket connectar() {
-        Socket clientSocket = null;
         try {
             if (serverSocket == null) {
                 serverSocket = new ServerSocket(PORT);
@@ -45,29 +43,41 @@ public class Servidor {
         }
     }
 
-    public byte[] enviarFitxers(String name) {
-        String fileName = LOCAL_STORAGE + name;
+    public void enviarFitxers() {
         try {
-            File file = new File(fileName);
-            if (!file.exists()) {
-                System.err.println("El fitxer " + fileName + " no existeix.");
-                return null;
+            ObjectInputStream input = new ObjectInputStream(clientSocket.getInputStream());
+            ObjectOutputStream output = new ObjectOutputStream(clientSocket.getOutputStream());
+            
+            while (true) {
+                String nomFitxer = (String) input.readObject();
+                Fitxer fitxer = new Fitxer(nomFitxer);
+                if (fitxer.getName().equalsIgnoreCase("sortir")) {
+                    System.out.println("El client surt.");
+                    break;
+                }
+                System.out.println("Nom del fitxer a buscar: " + fitxer.getName());
+                byte[] contingut = fitxer.getContingut();
+                if (contingut == null) {
+                    System.out.println("Error llegint el fitxer del client: null");
+                    output.writeObject(null);
+                    System.out.println("Nom del fitxer buit o nul. Sortint...");
+                    return;
+                } else {
+                    System.out.println("Pes del fitxer del client: " + contingut.length + " bytes");
+                    System.out.println("Fitxer enviat al client: " + fitxer.getPath() + fitxer.getName());
+                    output.writeObject(contingut);
+                }
             }
-
-            Path path = file.toPath();
-            byte[] contingut = Files.readAllBytes(path);
-            return contingut;
-
         } catch (Exception e) {
             e.getStackTrace();
         }
-        return null;
     }
 
     public static void main(String[] args) {
         Servidor servidor = new Servidor();
         servidor.connectar();
+        System.out.println("Esperant a que el client introdueixi el nom del fitxer...");
         servidor.enviarFitxers();
-        servidor.tancarConnexio();
+        servidor.tancarConnexio(servidor.clientSocket);
     }
 }
