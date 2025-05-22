@@ -5,22 +5,23 @@ import java.net.Socket;
 
 public class GestorClients extends Thread {
     private Socket client;
-    private ObjectOutputStream oos;
-    private ObjectInputStream ois;
+    private ObjectOutputStream output;
+    private ObjectInputStream input;
     private ServidorXat servidor;
     private String nom;
     private boolean sortir = false;
 
     public GestorClients(Socket client, ServidorXat servidor) {
-        this.client = client;
-        this.servidor = servidor;
-        try {
-            oos = new ObjectOutputStream(client.getOutputStream());
-            ois = new ObjectInputStream(client.getInputStream());
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    this.client = client;
+    this.servidor = servidor;
+    try {
+        output = new ObjectOutputStream(client.getOutputStream());
+        output.flush(); 
+        input = new ObjectInputStream(client.getInputStream());
+    } catch (IOException e) {
+        e.printStackTrace();
     }
+}
 
     public String getNom() {
         return nom;
@@ -29,7 +30,7 @@ public class GestorClients extends Thread {
     public void run() {
         try {
             while (!sortir) {
-                String missatge = (String) ois.readObject();
+                String missatge = (String) input.readObject();
                 processaMissatge(missatge);
             }
         } catch (Exception e) {
@@ -37,13 +38,15 @@ public class GestorClients extends Thread {
         } finally {
             try {
                 client.close();
-            } catch (IOException e) {}
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
 
-    public void enviarMissatge(String remitent, String missatge) {
+    public void enviarMissatge(String missatge) {
         try {
-            oos.writeObject(Missatge.getMissatgePersonal(remitent, missatge));
+            output.writeObject(missatge);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -71,7 +74,7 @@ public class GestorClients extends Thread {
                 servidor.enviarMissatgePersonal(parts[1], nom, parts[2]);
                 break;
             default:
-                System.out.println("Codi de missatge desconegut.");
+                System.out.println("Codi de missatge desconegut: " + codi);
         }
     }
 }

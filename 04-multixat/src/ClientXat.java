@@ -4,74 +4,49 @@ import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.Scanner;
 
-public class ClientXat {
+public class ClientXat extends Thread {
     
     private Socket socket;
-    private ObjectOutputStream oos;
-    private ObjectInputStream ois;
+    private ObjectOutputStream output;
+    private ObjectInputStream input;
     private boolean sortir = false;
 
     public void connecta() {
-        try {
-            socket = new Socket("localhost", 9999);
-            oos = new ObjectOutputStream(socket.getOutputStream());
-            System.out.println("Client connectat a localhost:9999");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    try {
+        socket = new Socket("localhost", 9999);
+        output = new ObjectOutputStream(socket.getOutputStream());
+        output.flush(); 
+        input = new ObjectInputStream(socket.getInputStream());
+        System.out.println("Client connectat a localhost:9999");
+    } catch (IOException e) {
+        e.printStackTrace();
     }
+}
 
-    public void enviarMissatge(String msg) {
-        try {
-            oos.writeObject(msg);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public void enviarMissatge(String msg) throws IOException {
+        output.writeObject(msg);
     }
 
     public void tancarClient() {
         try {
-            if (ois != null) ois.close();
-            if (oos != null) oos.close();
+            if (input != null) input.close();
+            if (output != null) output.close();
             if (socket != null) socket.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public void execucio() {
-        try {
-            ois = new ObjectInputStream(socket.getInputStream());
-            new Thread(() -> {
-                try {
-                    while (!sortir) {
-                        String missatge = (String) ois.readObject();
-                        String codi = Missatge.getCodiMissatge(missatge);
-                        String[] parts = Missatge.getPartsMissatge(missatge);
+    public String getLinea(Scanner sc, String prompt, boolean obligatori) {
+        System.out.print(prompt + " ");
+        String line = sc.nextLine().trim();
 
-                        switch (codi) {
-                            case Missatge.CODI_SORTIR_TOTS:
-                                sortir = true;
-                                break;
-                            case Missatge.CODI_MSG_PERSONAL:
-                                System.out.println("Missatge de (" + parts[1] + "): " + parts[2]);
-                                break;
-                            case Missatge.CODI_MSG_GRUP:
-                                System.out.println(parts[1]);
-                                break;
-                            default:
-                                System.out.println("Error: Codi desconegut");
-                        }
-                    }
-                } catch (Exception e) {
-                    System.out.println("Error rebent missatge. Sortint...");
-                } finally {
-                    tancarClient();
-                }
-            }).start();
-        } catch (IOException e) {
-            e.printStackTrace();
+        while (obligatori && line.isEmpty()) {
+            System.out.print(prompt + " ");
+            line = sc.nextLine().trim();
         }
+
+        return line;
     }
 
     public void ajuda() {
@@ -85,58 +60,75 @@ public class ClientXat {
         System.out.println("---------------------");
     }
 
-    public void mainLoop() {
-        connecta();
-        execucio();
-        ajuda();
-        Scanner sc = new Scanner(System.in);
-        
-        while (!sortir) {
-            System.out.print("> ");
-            String input = sc.nextLine();
-
-            if (input.isEmpty()) {
-                sortir = true;
-                enviarMissatge(Missatge.getMissatgeSortirClient("Adeu"));
-                break;
+    @Override
+    public void run() {
+        try {
+            input = new ObjectInputStream(socket.getInputStream());
+            while (!sortir) {
+                String msgRaw = (String) input.readObject();
+                String codi   = Missatge.getCodiMissatge(msgRaw);
+                String[] parts    = Missatge.getPartsMissatge(msgRaw);
+                switch (codi) {
+                    case Missatge.CODI_MSG_PERSONAL:
+                        System.out.println("Missatge de (" + parts[1] + "): " + parts[2]);
+                        break;
+                    case Missatge.CODI_MSG_GRUP:
+                        System.out.println(parts[1]);
+                        break;
+                    case Missatge.CODI_SORTIR_TOTS:
+                        sortir = true;
+                        break;
+                    default:
+                        System.out.println("Error: codi desconegut " + codi);
+                }
             }
-
-            switch (input) {
-                case "1":
-                    System.out.print("Introdueix el nom: ");
-                    String nom = sc.nextLine();
-                    enviarMissatge(Missatge.getMissatgeConectar(nom));
-                    break;
-                case "2":
-                    System.out.print("Destinatari: ");
-                    String dest = sc.nextLine();
-                    System.out.print("Missatge: ");
-                    String msg = sc.nextLine();
-                    enviarMissatge(Missatge.getMissatgePersonal(dest, msg));
-                    break;
-                case "3":
-                    System.out.print("Missatge grup: ");
-                    String grupMsg = sc.nextLine();
-                    enviarMissatge(Missatge.getMissatgeGrup(grupMsg));
-                    break;
-                case "4":
-                    sortir = true;
-                    enviarMissatge(Missatge.getMissatgeSortirClient("Adeu"));
-                    break;
-                case "5":
-                    sortir = true;
-                    enviarMissatge(Missatge.getMissatgeSortirTots("Adeu"));
-                    break;
-                default:
-                    ajuda();
-            }
+        } catch (Exception e) {
+        } finally {
+            try { tancarClient(); } catch (Exception e) {}
         }
-
-        sc.close();
-        tancarClient();
     }
 
     public static void main(String[] args) {
-        new ClientXat().mainLoop();
+        Scanner sc = new Scanner(System.in);
+        ClientXat client = new ClientXat();
+        try {
+            client.connecta();
+            client.start();
+            client.ajuda();
+            boolean acaba = false;
+            while (!acaba) {
+                String op = sc.nextLine().trim();
+                switch (op) {
+                    case "1":
+                        String nom = client.getLinea(sc, "Introdueix el nom:", true);
+                        client.enviarMissatge(Missatge.getMissatgeConectar(nom));
+                        break;
+                    case "2":
+                        String dest = client.getLinea(sc, "Destinatari:", true);
+                        String msg  = client.getLinea(sc, "Missatge a enviar:", true);
+                        client.enviarMissatge(Missatge.getMissatgePersonal(dest, msg));
+                        break;
+                    case "3":
+                        String mg   = client.getLinea(sc, "Missatge grup:", true);
+                        client.enviarMissatge(Missatge.getMissatgeGrup(mg));
+                        break;
+                    case "4":
+                        client.enviarMissatge(Missatge.getMissatgeSortirClient("Adeu"));
+                        acaba = true;
+                        break;
+                    case "5":
+                        client.enviarMissatge(Missatge.getMissatgeSortirTots("Adeu"));
+                        acaba = true;
+                        break;
+                    default:
+                        System.out.println("Opció no vàlida. Utilitza numeros per a escollir una opció.");
+                }
+            }
+            client.tancarClient();
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            sc.close();
+        }
     }
 }

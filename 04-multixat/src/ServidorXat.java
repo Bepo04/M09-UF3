@@ -22,7 +22,7 @@ public class ServidorXat {
                 Socket clientSocket = serverSocket.accept();
                 System.out.println("Client connectat: " + clientSocket.getInetAddress());
                 GestorClients gc = new GestorClients(clientSocket, this);
-                gc.start();
+                gc.start(); // Cada client es gestiona amb un nou thread
             }
         } catch (IOException e) {
             e.printStackTrace();
@@ -43,33 +43,43 @@ public class ServidorXat {
         enviarMissatgeGrup(MSG_SORTIR);
         clients.clear();
         sortir = true;
+        System.out.println("Tancant tots els clients.");
     }
 
-    public synchronized void afegirClient(GestorClients gc) {
+    public void afegirClient(GestorClients gc) {
         clients.put(gc.getNom(), gc);
         enviarMissatgeGrup("Entra: " + gc.getNom());
+
+        String debugMsg = "DEBUG: multicast Entra: " + gc.getNom();
+        for (GestorClients gestor : clients.values()) {
+            gestor.enviarMissatge(Missatge.getMissatgeGrup(debugMsg));
+        }
     }
 
-    public synchronized void eliminarClient(String nom) {
+    public void eliminarClient(String nom) {
         if (clients.containsKey(nom)) {
             clients.remove(nom);
+            System.out.println("Surt: " + nom);
         }
     }
 
-    public synchronized void enviarMissatgeGrup(String missatge) {
+    public void enviarMissatgeGrup(String missatge) {
         for (GestorClients gc : clients.values()) {
-            gc.enviarMissatge("Servidor", missatge);
+            gc.enviarMissatge(missatge);
         }
     }
 
-    public synchronized void enviarMissatgePersonal(String destinatari, String remitent, String missatge) {
+    public void enviarMissatgePersonal(String destinatari, String remitent, String missatge) {
+        System.out.println("Missatge personal per (" + destinatari + ") de (" + remitent + "): " + missatge);   
         GestorClients dest = clients.get(destinatari);
         if (dest != null) {
-            dest.enviarMissatge(remitent, missatge);
+            String missatgeEnviar = Missatge.CODI_MSG_PERSONAL + "#" + remitent + "#" + missatge;
+            dest.enviarMissatge(missatgeEnviar);
         }
     }
 
     public static void main(String[] args) {
-        new ServidorXat().servidorAEscoltar();
+        ServidorXat servidor = new ServidorXat();
+        servidor.servidorAEscoltar();
     }
 }
